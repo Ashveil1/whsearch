@@ -32,7 +32,15 @@ class BrowserRenderer:
     to None — callers must always have a non-browser fallback.
     """
 
-    def __init__(self, *, timeout_seconds: float = 15.0, max_pages: int = 2) -> None:
+    _LAUNCH_ARGS = ("--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu")
+
+    def __init__(
+        self,
+        *,
+        timeout_seconds: float = 15.0,
+        max_pages: int = 2,
+        executable_path: str | None = None,
+    ) -> None:
         if timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be positive")
         if max_pages < 1:
@@ -40,6 +48,7 @@ class BrowserRenderer:
         self._timeout_ms = int(timeout_seconds * 1000)
         self._semaphore = asyncio.Semaphore(max_pages)
         self._lock = asyncio.Lock()
+        self._executable_path = executable_path
         self._playwright: Any | None = None
         self._browser: Any | None = None
 
@@ -72,7 +81,13 @@ class BrowserRenderer:
                 return self._browser
             playwright = await factory().__aenter__()
             self._playwright = playwright
-            self._browser = await playwright.chromium.launch(headless=True)
+            launch_kwargs: dict[str, Any] = {
+                "headless": True,
+                "args": list(self._LAUNCH_ARGS),
+            }
+            if self._executable_path:
+                launch_kwargs["executable_path"] = self._executable_path
+            self._browser = await playwright.chromium.launch(**launch_kwargs)
             return self._browser
 
     async def aclose(self) -> None:

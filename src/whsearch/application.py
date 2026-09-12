@@ -38,7 +38,10 @@ class Application:
         robots = RobotsPolicy(client, self.settings.user_agent)
         browser: BrowserRenderer | None = None
         if self.settings.browser_enabled and is_browser_available():
-            browser = BrowserRenderer(timeout_seconds=self.settings.browser_timeout_seconds)
+            browser = BrowserRenderer(
+                timeout_seconds=self.settings.browser_timeout_seconds,
+                executable_path=self.settings.chromium_path,
+            )
         self.reader: DocumentReader = reader or ReaderService(
             client,
             robots,

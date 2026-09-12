@@ -85,6 +85,8 @@ Behavior and limits (all free, no keys):
 - At most 2 concurrent renders, 15s each, images/fonts/media blocked.
 - Missing playwright (or any render failure) degrades silently to static text.
 - `WHSEARCH_BROWSER=0` disables it; `WHSEARCH_BROWSER_TIMEOUT` tunes seconds.
+- `WHSEARCH_CHROMIUM_PATH=/usr/bin/chromium` reuses a system browser instead of
+  downloading one (`playwright install chromium`).
 - `whsearch://stats` reports `reader.browser_installed/enabled/timeout`.
 
 ## License

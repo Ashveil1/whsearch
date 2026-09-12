@@ -21,6 +21,7 @@ class Settings:
     index_max_entries: int = 5000
     browser_enabled: bool = True
     browser_timeout_seconds: float = 15.0
+    chromium_path: str | None = None
 
     @classmethod
     def from_environment(cls) -> Settings:
@@ -56,6 +57,7 @@ class Settings:
             browser_timeout_seconds=_float_env(
                 "WHSEARCH_BROWSER_TIMEOUT", defaults.browser_timeout_seconds, minimum=1.0
             ),
+            chromium_path=os.getenv("WHSEARCH_CHROMIUM_PATH") or None,
         )
 
 
