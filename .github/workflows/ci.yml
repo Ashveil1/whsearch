@@ -26,16 +26,3 @@ jobs:
         run: python -m mypy src tests
       - name: Compile check
         run: python -m compileall -q src tests
-
-  wrapper:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-      - name: Launcher syntax
-        run: node --check npm/launcher.js
-      - name: Pack dry run
-        working-directory: npm
-        run: npm pack --dry-run

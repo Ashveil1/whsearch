@@ -47,27 +47,26 @@ The quality gate must pass before moving to the next phase.
 
 ## Install as an MCP server
 
-Requires Python >= 3.12 on PATH.
-
-Via npx (after the wrapper is published to the npm registry):
+Requires Python >= 3.12. After the `whsearch` package is published to PyPI,
+no manual install is needed — `uvx` fetches and runs it on first use:
 
 ```json
 {
   "mcpServers": {
-    "whsearch": { "command": "npx", "args": ["-y", "@Ashveil1/whsearch"] }
+    "whsearch": { "command": "uvx", "args": ["--from", "whsearch[mcp]", "whsearch"] }
   }
 }
 ```
 
-From source instead:
+Alternatives:
 
 ```bash
-pip install -e ".[mcp]"
-whsearch
+uv tool install "whsearch[mcp]" && whsearch   # persistent install via uv
+pipx install "whsearch[mcp]" && whsearch      # persistent install via pipx
+pip install -e ".[mcp]" && whsearch           # from source
 ```
 
-The wrapper source lives in `npm/` (`BACKEND_VERSION` there must match
-`pyproject.toml`). `WHSEARCH_INDEX_PATH` enables the persistent local index.
+`WHSEARCH_INDEX_PATH` enables the persistent local index.
 
 ## License
 
