@@ -1,0 +1,23 @@
+{
+  "name": "@Ashveil1/whsearch",
+  "version": "0.1.0",
+  "description": "AI-native research search MCP server (npx launcher, Python backend)",
+  "license": "GPL-3.0-or-later",
+  "bin": {
+    "whsearch": "launcher.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "launcher.js",
+    "README.md"
+  ],
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "search",
+    "research",
+    "whsearch"
+  ]
+}
