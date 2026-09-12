@@ -7,6 +7,14 @@ import pytest
 from whsearch.exceptions import ReaderError
 from whsearch.reader import ReaderService, RobotsPolicy
 from whsearch.reader.browser import BrowserRenderer, _block_handler, is_browser_available
+from whsearch.reader.service import _needs_browser
+
+
+def test_needs_browser_for_short_or_repeated_content() -> None:
+    assert _needs_browser("short") is True
+    assert _needs_browser("same line here yes indeed ok\n" * 3) is True
+    long_distinct = " ".join(f"Unique informative sentence number {i} here." for i in range(10))
+    assert _needs_browser(long_distinct) is False
 
 
 class FakeRoute:

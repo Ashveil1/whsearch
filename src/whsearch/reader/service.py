@@ -29,6 +29,18 @@ _logger = get_logger("reader")
 _BROWSER_MIN_CHARS = 200
 
 
+def _needs_browser(content: str) -> bool:
+    """True for JS-shell pages: almost nothing, or the same line repeated.
+
+    Length alone misses pages like `bankhunprathed.vercel.app` whose static
+    HTML is just one meta description stamped 3 times (310 chars of noise).
+    """
+    if len(content) < _BROWSER_MIN_CHARS:
+        return True
+    lines = [line.strip() for line in content.split("\n") if line.strip()]
+    return len(lines) >= 3 and len(set(lines)) * 3 <= len(lines)
+
+
 class ReaderService:
     """Fetches and extracts web documents while enforcing access/resource limits."""
 
@@ -79,7 +91,7 @@ class ReaderService:
             document = _extract(url, html)
         except ValueError:
             document = None
-        if document is not None and len(document.content) >= _BROWSER_MIN_CHARS:
+        if document is not None and not _needs_browser(document.content):
             pass
         elif self._browser is not None:
             rendered = await self._browser.render_text(url, user_agent=self._user_agent)
