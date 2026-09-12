@@ -80,6 +80,16 @@ _ACADEMIC_HINTS = frozenset(
     }
 )
 
+_VIDEO_HINTS = frozenset(
+    {
+        "youtube", "youtu.be", "video", "videos", "clip", "clips",
+        "vlog", "livestream", "trailer", "mv", "ep.",
+        "วิดีโอ", "วีดีโอ", "คลิป", "ยูทูบ", "ยูทูป", "ดูย้อนหลัง",
+    }
+)
+
+_VIDEO_DOMAINS = frozenset({"youtube.com", "youtu.be"})
+
 
 def _contains_hint(text: str, hints: frozenset[str]) -> bool:
     lowered = text.lower()
@@ -94,3 +104,14 @@ def wants_news(text: str, recency_days: int | None) -> bool:
 
 def wants_academic(text: str) -> bool:
     return _contains_hint(text, _ACADEMIC_HINTS)
+
+
+def wants_video(text: str, domains: tuple[str, ...] = ()) -> bool:
+    if any(
+        d.lower().removeprefix("www.").strip() in _VIDEO_DOMAINS
+        or d.lower().strip().endswith(".youtube.com")
+        for d in domains
+        if d.strip()
+    ):
+        return True
+    return _contains_hint(text, _VIDEO_HINTS)

@@ -40,6 +40,18 @@ class AcademicStub:
         return self._results
 
 
+class VideoStub:
+    vertical = "video"
+
+    def __init__(self, results: Sequence[SearchResult]) -> None:
+        self._results = list(results)
+        self.calls = 0
+
+    async def search(self, query: SearchQuery) -> Sequence[SearchResult]:
+        self.calls += 1
+        return self._results
+
+
 class FailingProvider:
     vertical = "web"
 
@@ -112,6 +124,20 @@ def test_academic_provider_only_used_for_academic_intent() -> None:
     assert academic.calls == 0
     asyncio.run(service.search(SearchQuery("arxiv paper on testing", limit=5)))
     assert academic.calls == 1
+
+
+def test_video_provider_only_used_for_video_intent() -> None:
+    video = VideoStub([SearchResult(title="V", url="https://www.youtube.com/watch?v=abc")])
+    service = SearchService(
+        StubProvider([SearchResult(title="A", url="https://example.com/a")]),
+        extra_providers=[video],
+    )
+    asyncio.run(service.search(SearchQuery("plain tech query", limit=5)))
+    assert video.calls == 0
+    asyncio.run(service.search(SearchQuery("funny cat video", limit=5)))
+    assert video.calls == 1
+    asyncio.run(service.search(SearchQuery("lofi girl", limit=5, domains=("youtube.com",))))
+    assert video.calls == 2
 
 
 def test_cache_serves_stale_on_total_failure() -> None:

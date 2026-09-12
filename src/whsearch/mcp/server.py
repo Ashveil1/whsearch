@@ -149,6 +149,7 @@ async def whsearch_stats() -> dict[str, object]:
             "wikipedia-th",
             "googlenews",
             "openalex-academic",
+            "youtube-video",
         ],
         "limits": {
             "max_search_results": settings.max_search_results,

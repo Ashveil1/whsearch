@@ -87,6 +87,17 @@ Behavior and limits (all free, no keys):
 - `WHSEARCH_BROWSER=0` disables it; `WHSEARCH_BROWSER_TIMEOUT` tunes seconds.
 - `WHSEARCH_CHROMIUM_PATH=/usr/bin/chromium` reuses a system browser instead of
   downloading one (`playwright install chromium`).
+
+## Video vertical (YouTube, keyless)
+
+Video-intent queries (youtube/video/คลิป, or `site:youtube.com`) also fan out
+to a first-party YouTube search provider (`ytInitialData` parsing — no key,
+no Invidious/Piped instances). Watch URLs read back as documents built from
+the video's own metadata + description, with `MM:SS` chapter lines as passage
+sections, so a multimodal caller knows *where* in the video to look:
+
+- Direct captions are intentionally not fetched: YouTube's timedtext now
+  requires proof-of-origin tokens and rate-limits keyless access (429).
 - `whsearch://stats` reports `reader.browser_installed/enabled/timeout`.
 
 ## License

@@ -8,6 +8,7 @@ from whsearch.search.query import (
     simplify_query,
     wants_academic,
     wants_news,
+    wants_video,
 )
 
 
@@ -64,3 +65,12 @@ def test_wants_academic_on_keywords() -> None:
     assert wants_academic("arxiv paper on retrieval") is True
     assert wants_academic("งานวิจัย retrieval") is True
     assert wants_academic("Elengenix") is False
+
+
+def test_wants_video_on_keywords_or_domains() -> None:
+    assert wants_video("funny cat video") is True
+    assert wants_video("คลิปตลก") is True
+    assert wants_video("lofi girl", ("youtube.com",)) is True
+    assert wants_video("lofi girl", ("youtu.be",)) is True
+    assert wants_video("Elengenix") is False
+    assert wants_video("Elengenix", ("github.com",)) is False

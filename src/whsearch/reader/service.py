@@ -22,6 +22,12 @@ from whsearch.observability import get_logger
 from .browser import BrowserRenderer
 from .extractors.html import HtmlExtractor
 from .robots import RobotsPolicy
+from .video import (
+    description_passages,
+    is_video_url,
+    parse_publish_date,
+    parse_watch_page,
+)
 
 _logger = get_logger("reader")
 
@@ -91,6 +97,14 @@ class ReaderService:
             document = _extract(url, html)
         except ValueError:
             document = None
+        if is_video_url(url):
+            # Watch pages are JS shells: video metadata + description with
+            # chapters beats nav garbage, and costs no extra request.
+            video_doc = _from_watch_page(url, html, document)
+            if video_doc is not None and (
+                document is None or len(video_doc.content) > len(document.content)
+            ):
+                document = video_doc
         if document is not None and not _needs_browser(document.content):
             pass
         elif self._browser is not None:
@@ -110,6 +124,38 @@ class ReaderService:
         if self._browser is not None:
             await self._browser.aclose()
             self._browser = None
+
+
+def _from_watch_page(url: str, html: str, document: Document | None) -> Document | None:
+    meta = parse_watch_page(html)
+    if not meta.get("video_id") and not meta.get("title"):
+        return None
+    sections = description_passages(meta.get("description", ""))
+    if not sections:
+        return None
+    passages = tuple(
+        Passage(text=text, index=index, section=section)
+        for index, (section, text) in enumerate(sections)
+    )
+    title = meta.get("title") or (document.title if document else url)
+    author = meta.get("author") or None
+    published_at = parse_publish_date(meta.get("publish_date", "")) or (
+        document.published_at if document else None
+    )
+    return Document(
+        url=url,
+        title=title,
+        content="\n\n".join(p.text for p in passages),
+        passages=passages,
+        author=author,
+        published_at=published_at,
+        metadata={
+            "video_id": meta.get("video_id", ""),
+            "channel_id": meta.get("channel_id", ""),
+            "length_seconds": meta.get("length_seconds", ""),
+            "views": meta.get("views", ""),
+        },
+    )
 
 
 def _from_rendered(

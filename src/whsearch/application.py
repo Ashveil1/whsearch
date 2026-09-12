@@ -18,6 +18,7 @@ from whsearch.search.providers.duckduckgo_html import DuckDuckGoHtmlProvider
 from whsearch.search.providers.googlenews import GoogleNewsProvider
 from whsearch.search.providers.openalex import OpenAlexProvider
 from whsearch.search.providers.wikipedia import WikipediaProvider
+from whsearch.search.providers.youtube import YouTubeProvider
 
 
 class Application:
@@ -98,5 +99,6 @@ async def create_application(settings: Settings | None = None) -> Application:
             WikipediaProvider(client, language="th"),
             GoogleNewsProvider(client),
             OpenAlexProvider(client),
+            YouTubeProvider(client),
         ],
     )

@@ -12,6 +12,7 @@ class SourceType(StrEnum):
     NEWS = "news"
     ACADEMIC = "academic"
     DOCUMENTATION = "documentation"
+    VIDEO = "video"
     LOCAL = "local"
 
 

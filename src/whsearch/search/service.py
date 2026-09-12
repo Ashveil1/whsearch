@@ -17,6 +17,7 @@ from whsearch.search.query import (
     simplify_query,
     wants_academic,
     wants_news,
+    wants_video,
 )
 
 _RRF_K = 60
@@ -197,11 +198,14 @@ class SearchService:
         selected: list[SearchProvider] = []
         use_news = wants_news(query.text, query.recency_days)
         use_academic = wants_academic(query.text)
+        use_video = wants_video(query.text, query.domains)
         for provider in self._providers:
             vertical = _provider_vertical(provider)
             if vertical == "news" and not use_news:
                 continue
             if vertical == "academic" and not use_academic:
+                continue
+            if vertical == "video" and not use_video:
                 continue
             selected.append(provider)
         return selected or list(self._providers)
