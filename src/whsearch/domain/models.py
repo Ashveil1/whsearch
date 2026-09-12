@@ -158,6 +158,8 @@ class ResearchReport:
     sources: tuple[str, ...] = ()
     rounds: int = 0
     stopped_reason: StoppingReason = StoppingReason.BUDGET_EXHAUSTED
+    answer: str = ""
+    answer_citations: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.question.strip():

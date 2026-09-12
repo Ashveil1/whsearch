@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "whsearch"
-version = "0.1.0"
+version = "0.2.0"
 description = "Modular AI-native research search engine"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -27,6 +27,7 @@ dependencies = [
 [project.optional-dependencies]
 test = ["pytest>=8,<9"]
 mcp = ["mcp>=1,<2"]
+js = ["playwright>=1.30,<2"]
 
 [project.scripts]
 whsearch = "whsearch.mcp.server:main"

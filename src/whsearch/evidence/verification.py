@@ -23,7 +23,7 @@ def verify_claims(
     claims: list[Claim],
     sources: list[SourcedPassage],
     *,
-    min_score: float = 0.3,
+    min_score: float = 0.5,
     top_k: int = 3,
     min_support: int = 2,
     min_independent_domains: int = 2,

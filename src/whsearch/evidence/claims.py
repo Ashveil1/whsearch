@@ -48,8 +48,12 @@ def extract_claims(texts: list[str], *, min_words: int = 6, max_claims: int = 50
     seen: set[str] = set()
     for text in texts:
         for sentence in _SENTENCE.split(" ".join(text.split())):
-            cleaned = sentence.strip()
-            if len(cleaned.split()) < min_words or len(cleaned) > 500:
+            cleaned = sentence.strip().replace("|", " ").strip()
+            cleaned = re.sub(r"\s+", " ", cleaned)
+            # Count real words only: markdown table pipes and stray symbols
+            # ("No personal data is stored. |") must not pass the bar.
+            real_words = [w for w in cleaned.split() if re.search(r"[A-Za-z0-9ก-๙]", w)]
+            if len(real_words) < min_words or len(cleaned) > 500:
                 continue
             cid = claim_id(cleaned)
             if cid in seen:
@@ -101,3 +105,34 @@ def _content_tokens(text: str) -> set[str]:
 
 def _has_negation(text: str) -> bool:
     return not _NEGATIONS.isdisjoint(_TOKEN.findall(text.lower()))
+
+
+def build_answer(claims: list[Claim], *, max_claims: int = 5) -> tuple[str, tuple[str, ...]]:
+    """Build a deterministic extractive answer from ranked claims.
+
+    Takes claims already sorted (supported first) and returns an
+    (answer, citations) pair. Unverified claims are included with a
+    hedge so small-budget research still yields a usable summary instead
+    of an empty-looking claim dump.
+    """
+    if max_claims < 1:
+        raise ValueError("max_claims must be positive")
+    top = [c for c in claims if c.text.strip()][:max_claims]
+    if not top:
+        return "", ()
+    lines: list[str] = []
+    citations: list[str] = []
+    for index, claim in enumerate(top, start=1):
+        for url in claim.sources:
+            if url not in citations:
+                citations.append(url)
+        marker = f"[{index}]"
+        if claim.status.value == "supported":
+            lines.append(f"{index}. {claim.text} {marker}")
+        elif claim.status.value == "contested":
+            lines.append(f"{index}. {claim.text} {marker} (contested — sources disagree)")
+        else:
+            lines.append(f"{index}. {claim.text} {marker} (unverified)")
+    header = "Top findings:" if len(top) > 1 else "Top finding:"
+    answer = header + "\n" + "\n".join(lines)
+    return answer, tuple(citations)

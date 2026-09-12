@@ -11,8 +11,12 @@ from whsearch.domain.protocols import DocumentReader, DocumentStore, SearchProvi
 from whsearch.index import SqliteDocumentStore
 from whsearch.infrastructure.http import HttpClientFactory
 from whsearch.reader import ReaderService, RobotsPolicy
+from whsearch.reader.browser import BrowserRenderer, is_browser_available
 from whsearch.search import SearchService
 from whsearch.search.providers.duckduckgo import DuckDuckGoProvider
+from whsearch.search.providers.duckduckgo_html import DuckDuckGoHtmlProvider
+from whsearch.search.providers.googlenews import GoogleNewsProvider
+from whsearch.search.providers.openalex import OpenAlexProvider
 from whsearch.search.providers.wikipedia import WikipediaProvider
 
 
@@ -32,11 +36,15 @@ class Application:
         self.settings = settings or Settings.from_environment()
         self.client = client
         robots = RobotsPolicy(client, self.settings.user_agent)
+        browser: BrowserRenderer | None = None
+        if self.settings.browser_enabled and is_browser_available():
+            browser = BrowserRenderer(timeout_seconds=self.settings.browser_timeout_seconds)
         self.reader: DocumentReader = reader or ReaderService(
             client,
             robots,
             max_bytes=self.settings.max_response_bytes,
             user_agent=self.settings.user_agent,
+            browser=browser,
         )
         providers = [provider or DuckDuckGoProvider(client)]
         if extra_providers:
@@ -58,6 +66,9 @@ class Application:
     async def aclose(self) -> None:
         if isinstance(self.store, SqliteDocumentStore):
             self.store.close()
+        aclose = getattr(self.reader, "aclose", None)
+        if callable(aclose):
+            await aclose()
         await self.client.aclose()
 
     async def __aenter__(self) -> Self:
@@ -76,5 +87,13 @@ async def create_application(settings: Settings | None = None) -> Application:
     resolved = settings or Settings.from_environment()
     client = HttpClientFactory(timeout=resolved.request_timeout_seconds).create()
     return Application(
-        client, settings=resolved, extra_providers=[WikipediaProvider(client)]
+        client,
+        settings=resolved,
+        extra_providers=[
+            DuckDuckGoHtmlProvider(client),
+            WikipediaProvider(client, language="en"),
+            WikipediaProvider(client, language="th"),
+            GoogleNewsProvider(client),
+            OpenAlexProvider(client),
+        ],
     )

@@ -13,7 +13,10 @@ async def research(
     max_queries: int = 8,
     max_pages: int = 20,
     max_rounds: int = 3,
+    recency_days: int | None = None,
 ) -> dict[str, object]:
+    budget = ResearchBudget(max_queries=max_queries, max_pages=max_pages, max_rounds=max_rounds)
+    report = await app.research_agent.research(question, budget, recency_days=recency_days)
     budget = ResearchBudget(max_queries=max_queries, max_pages=max_pages, max_rounds=max_rounds)
     report = await app.research_agent.research(question, budget)
     _logger.debug(
@@ -25,6 +28,8 @@ async def research(
     )
     return {
         "question": report.question,
+        "answer": report.answer,
+        "answer_citations": list(report.answer_citations),
         "stopped_reason": report.stopped_reason.value,
         "rounds": report.rounds,
         "sources": list(report.sources),

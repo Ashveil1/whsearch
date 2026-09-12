@@ -68,6 +68,25 @@ pip install -e ".[mcp]" && whsearch           # from source
 
 `WHSEARCH_INDEX_PATH` enables the persistent local index.
 
+## Optional headless-browser fallback (L3)
+
+Pages that render only via JavaScript (JS-shell SPAs) defeat static
+extraction. When the `js` extra is installed, the reader tries headless
+Chromium **only** for pages where static extraction yields almost nothing:
+
+```bash
+pip install -e ".[mcp,js]" && .venv/bin/playwright install chromium
+```
+
+Behavior and limits (all free, no keys):
+
+- L1 trafilatura → L2 embedded JSON/meta → L3 headless, first hit wins.
+- L3 triggers only below 200 extracted chars; rendered text must also clear it.
+- At most 2 concurrent renders, 15s each, images/fonts/media blocked.
+- Missing playwright (or any render failure) degrades silently to static text.
+- `WHSEARCH_BROWSER=0` disables it; `WHSEARCH_BROWSER_TIMEOUT` tunes seconds.
+- `whsearch://stats` reports `reader.browser_installed/enabled/timeout`.
+
 ## License
 
 GPL-3.0-or-later, see `LICENSE`. Copyright (C) 2026 WHSearch contributors.

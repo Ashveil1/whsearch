@@ -1,4 +1,5 @@
 from .claims import (
+    build_answer,
     claim_id,
     extract_claims,
     find_contradictions,
@@ -9,6 +10,7 @@ from .verification import SourcedPassage, verify_claims
 
 __all__ = [
     "SourcedPassage",
+    "build_answer",
     "claim_id",
     "extract_claims",
     "find_contradictions",

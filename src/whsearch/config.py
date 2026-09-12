@@ -19,6 +19,8 @@ class Settings:
     cache_max_bytes: int = 500_000_000
     index_path: str | None = None
     index_max_entries: int = 5000
+    browser_enabled: bool = True
+    browser_timeout_seconds: float = 15.0
 
     @classmethod
     def from_environment(cls) -> Settings:
@@ -50,7 +52,18 @@ class Settings:
                 minimum=1,
                 maximum=1_000_000,
             ),
+            browser_enabled=_bool_env("WHSEARCH_BROWSER", defaults.browser_enabled),
+            browser_timeout_seconds=_float_env(
+                "WHSEARCH_BROWSER_TIMEOUT", defaults.browser_timeout_seconds, minimum=1.0
+            ),
         )
+
+
+def _bool_env(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() not in {"0", "false", "no", "off"}
 
 
 def _int_env(name: str, default: int, *, minimum: int, maximum: int | None = None) -> int:
