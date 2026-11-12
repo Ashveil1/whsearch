@@ -51,6 +51,7 @@ def test_research_tool_returns_report_dict() -> None:
             "saturated",
             "budget_exhausted",
             "max_rounds",
+            "no_more_queries",
         }
         claims = output["claims"]
         sources = output["sources"]

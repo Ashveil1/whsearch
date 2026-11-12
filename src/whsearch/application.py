@@ -36,7 +36,9 @@ class Application:
     ) -> None:
         self.settings = settings or Settings.from_environment()
         self.client = client
-        robots = RobotsPolicy(client, self.settings.user_agent)
+        robots = RobotsPolicy(
+            client, self.settings.user_agent, delay_seconds=self.settings.per_domain_delay_seconds
+        )
         browser: BrowserRenderer | None = None
         if self.settings.browser_enabled and is_browser_available():
             browser = BrowserRenderer(
@@ -47,6 +49,7 @@ class Application:
             client,
             robots,
             max_bytes=self.settings.max_response_bytes,
+            timeout_seconds=self.settings.read_timeout_seconds,
             user_agent=self.settings.user_agent,
             browser=browser,
         )
@@ -55,13 +58,19 @@ class Application:
             providers.extend(extra_providers)
         primary, *rest = providers
         self.search = SearchService(
-            primary, extra_providers=rest, max_results=self.settings.max_search_results
+            primary,
+            extra_providers=rest,
+            max_results=self.settings.max_search_results,
+            provider_timeout_seconds=self.settings.provider_timeout_seconds,
         )
         if store is not None:
             self.store: DocumentStore | None = store
         elif self.settings.index_path:
             self.store = SqliteDocumentStore(
-                self.settings.index_path, max_entries=self.settings.index_max_entries
+                self.settings.index_path,
+                max_entries=self.settings.index_max_entries,
+                max_bytes=self.settings.cache_max_bytes,
+                ttl_seconds=self.settings.index_ttl_seconds,
             )
         else:
             self.store = None
@@ -89,7 +98,11 @@ class Application:
 
 async def create_application(settings: Settings | None = None) -> Application:
     resolved = settings or Settings.from_environment()
-    client = HttpClientFactory(timeout=resolved.request_timeout_seconds).create()
+    client = HttpClientFactory(
+        timeout=resolved.request_timeout_seconds,
+        max_response_bytes=resolved.max_response_bytes,
+        ca_file=resolved.ca_file,
+    ).create()
     return Application(
         client,
         settings=resolved,

@@ -56,7 +56,7 @@ def _make_agent(
     return ResearchAgent(search, reader, store=store), reader
 
 
-def test_agent_reports_supported_claims() -> None:
+def test_agent_reports_lexical_matches() -> None:
     async def _main() -> None:
         agent, _ = _make_agent(list(DOCS))
         report = await agent.research(
@@ -65,7 +65,7 @@ def test_agent_reports_supported_claims() -> None:
         assert report.question == "What is Python programming?"
         assert report.rounds >= 1
         assert set(report.sources) == set(DOCS)
-        supported = [c for c in report.claims if c.status.value == "supported"]
+        supported = [c for c in report.claims if c.status.value == "lexical_match"]
         assert any("popular programming language" in c.text for c in supported)
         assert len(report.evidence) > 0
 

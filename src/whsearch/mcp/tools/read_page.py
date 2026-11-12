@@ -16,8 +16,13 @@ async def read_page(app: Application, url: str) -> dict[str, object]:
         "author": document.author,
         "published_at": document.published_at.isoformat() if document.published_at else None,
         "language": document.language,
-        "content": document.content,
+        "metadata": document.metadata,
+        "content": document.content[:20_000],
+        "total_chars": len(document.content),
+        "truncated": len(document.content) > 20_000,
+        "passage_count": len(document.passages),
         "passages": [
-            {"index": p.index, "section": p.section, "text": p.text} for p in document.passages
+            {"index": p.index, "section": p.section, "text": p.text[:2000]}
+            for p in document.passages[:20]
         ],
     }

@@ -43,5 +43,6 @@ def test_build_answer_empty_claims() -> None:
 def test_build_answer_caps_claims_and_dedupes_citations() -> None:
     claims = [_claim(f"c{i}", f"Claim number {i} here today.") for i in range(10)]
     answer, citations = build_answer(claims, max_claims=3)
-    assert "[3]" in answer and "[4]" not in answer
+    assert "3. Claim number 2" in answer and "4. Claim number 3" not in answer
+    assert "[1] [2]" in answer
     assert len(set(citations)) == 2

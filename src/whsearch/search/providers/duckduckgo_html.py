@@ -6,8 +6,8 @@ from bs4 import BeautifulSoup
 from whsearch.domain import SearchQuery, SearchResult
 from whsearch.exceptions import ProviderError
 from whsearch.observability import get_logger
-from whsearch.search.providers.duckduckgo import _extract_target_url
-from whsearch.search.query import df_for_recency, kl_for_query
+from whsearch.search.providers.duckduckgo import _extract_target_url, _is_duckduckgo_url
+from whsearch.search.query import df_for_recency, kl_for_query, provider_query
 
 _logger = get_logger("search.duckduckgo_html")
 
@@ -26,7 +26,10 @@ class DuckDuckGoHtmlProvider:
         self._client = client
 
     async def search(self, query: SearchQuery) -> list[SearchResult]:
-        params: dict[str, str] = {"q": query.text, "kl": kl_for_query(query.text)}
+        params: dict[str, str] = {
+            "q": provider_query(query.text, query.domains),
+            "kl": kl_for_query(query.text),
+        }
         date_filter = df_for_recency(query.recency_days)
         if date_filter:
             params["df"] = date_filter
@@ -38,8 +41,8 @@ class DuckDuckGoHtmlProvider:
             )
             response.raise_for_status()
         except httpx.HTTPError as exc:
-            _logger.warning("DuckDuckGo HTML request failed: %s", exc)
-            raise ProviderError(f"DuckDuckGo HTML request failed: {exc}") from exc
+            _logger.warning("DuckDuckGo HTML request failed: %s", type(exc).__name__)
+            raise ProviderError(f"DuckDuckGo HTML request failed: {type(exc).__name__}") from exc
 
         soup = BeautifulSoup(response.text, "html.parser")
         results: list[SearchResult] = []
@@ -51,7 +54,7 @@ class DuckDuckGoHtmlProvider:
             if not isinstance(href, str):
                 continue
             url = _extract_target_url(href)
-            if url is None or "duckduckgo.com" in url:
+            if url is None or _is_duckduckgo_url(url):
                 continue
             title = link.get_text(" ", strip=True)
             if not title:
@@ -63,13 +66,9 @@ class DuckDuckGoHtmlProvider:
                 if body and body != title:
                     snippet = body[:500]
                 else:
-                    snippet = f"{title} — result for '{query.text}'"
-            results.append(
-                SearchResult(title=title, url=url, snippet=snippet[:500])
-            )
+                    snippet = ""
+            results.append(SearchResult(title=title, url=url, snippet=snippet[:500]))
             if len(results) >= query.limit:
                 break
-        _logger.debug(
-            "DuckDuckGo HTML search: query=%r returned=%d", query.text, len(results)
-        )
+        _logger.debug("DuckDuckGo HTML search: query=%r returned=%d", query.text, len(results))
         return results

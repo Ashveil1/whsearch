@@ -17,7 +17,8 @@ class SourceType(StrEnum):
 
 
 class ClaimStatus(StrEnum):
-    SUPPORTED = "supported"
+    SUPPORTED = "supported"  # Reserved for externally verified evidence.
+    LEXICAL_MATCH = "lexical_match"
     CONTESTED = "contested"
     UNVERIFIED = "unverified"
 
@@ -27,6 +28,7 @@ class StoppingReason(StrEnum):
     SATURATED = "saturated"
     BUDGET_EXHAUSTED = "budget_exhausted"
     MAX_ROUNDS = "max_rounds"
+    NO_MORE_QUERIES = "no_more_queries"
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,6 +42,8 @@ class SearchQuery:
         text = self.text.strip()
         if not text:
             raise ValueError("search query must not be empty")
+        if len(text) > 2000:
+            raise ValueError("search query must be at most 2000 characters")
         if not 1 <= self.limit <= 100:
             raise ValueError("limit must be between 1 and 100")
         if self.recency_days is not None and self.recency_days < 0:
@@ -123,6 +127,9 @@ class Evidence:
     passage_index: int
     passage_text: str
     score: float
+    section: str | None = None
+    published_at: datetime | None = None
+    truncated: bool = False
 
     def __post_init__(self) -> None:
         parsed = urlparse(self.url)
@@ -161,9 +168,22 @@ class ResearchReport:
     stopped_reason: StoppingReason = StoppingReason.BUDGET_EXHAUSTED
     answer: str = ""
     answer_citations: tuple[str, ...] = ()
+    queries_used: int = 0
+    pages_attempted: int = 0
+    search_errors: int = 0
+    read_errors: int = 0
 
     def __post_init__(self) -> None:
         if not self.question.strip():
             raise ValueError("research question must not be empty")
-        if self.rounds < 0:
-            raise ValueError("rounds must be non-negative")
+        if (
+            min(
+                self.rounds,
+                self.queries_used,
+                self.pages_attempted,
+                self.search_errors,
+                self.read_errors,
+            )
+            < 0
+        ):
+            raise ValueError("research counters must be non-negative")

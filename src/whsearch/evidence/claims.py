@@ -3,9 +3,13 @@ from __future__ import annotations
 import re
 from urllib.parse import urlparse
 
+import tldextract
+
 from whsearch.domain import Claim
 
 _SENTENCE = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9\"'])")
+_PUBLIC_SUFFIX = tldextract.TLDExtract(suffix_list_urls=(), include_psl_private_domains=True)
+_THAI = re.compile(r"[ก-๙]")
 _TOKEN = re.compile(r"[\w-]+", re.UNICODE)
 
 _NEGATIONS = frozenset(
@@ -53,7 +57,8 @@ def extract_claims(texts: list[str], *, min_words: int = 6, max_claims: int = 50
             # Count real words only: markdown table pipes and stray symbols
             # ("No personal data is stored. |") must not pass the bar.
             real_words = [w for w in cleaned.split() if re.search(r"[A-Za-z0-9ก-๙]", w)]
-            if len(real_words) < min_words or len(cleaned) > 500:
+            enough_thai = bool(_THAI.search(cleaned)) and len(cleaned) >= 20
+            if (len(real_words) < min_words and not enough_thai) or len(cleaned) > 500:
                 continue
             cid = claim_id(cleaned)
             if cid in seen:
@@ -88,11 +93,9 @@ def find_contradictions(claims: list[Claim], *, min_overlap: float = 0.5) -> lis
 
 def registrable_domain(url: str) -> str:
     """Best-effort registrable domain used to judge source independence."""
-    netloc = urlparse(url).netloc.lower().split("@")[-1].split(":")[0]
-    if netloc.startswith("www."):
-        netloc = netloc[4:]
-    labels = netloc.split(".")
-    return ".".join(labels[-2:]) if len(labels) >= 2 else netloc
+    host = (urlparse(url).hostname or "").lower().rstrip(".")
+    result = _PUBLIC_SUFFIX(host)
+    return result.top_domain_under_public_suffix or host
 
 
 def independent_source_count(urls: list[str]) -> int:
@@ -123,16 +126,23 @@ def build_answer(claims: list[Claim], *, max_claims: int = 5) -> tuple[str, tupl
     lines: list[str] = []
     citations: list[str] = []
     for index, claim in enumerate(top, start=1):
+        markers: list[str] = []
         for url in claim.sources:
             if url not in citations:
                 citations.append(url)
-        marker = f"[{index}]"
+            marker = f"[{citations.index(url) + 1}]"
+            if marker not in markers:
+                markers.append(marker)
+        references = " ".join(markers)
         if claim.status.value == "supported":
-            lines.append(f"{index}. {claim.text} {marker}")
+            qualifier = ""
+        elif claim.status.value == "lexical_match":
+            qualifier = " (lexical match; not fact-checked)"
         elif claim.status.value == "contested":
-            lines.append(f"{index}. {claim.text} {marker} (contested — sources disagree)")
+            qualifier = " (potentially contested; heuristic)"
         else:
-            lines.append(f"{index}. {claim.text} {marker} (unverified)")
+            qualifier = " (unverified)"
+        lines.append(f"{index}. {claim.text} {references}{qualifier}".strip())
     header = "Top findings:" if len(top) > 1 else "Top finding:"
     answer = header + "\n" + "\n".join(lines)
     return answer, tuple(citations)

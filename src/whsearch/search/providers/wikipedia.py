@@ -39,8 +39,8 @@ class WikipediaProvider:
             response.raise_for_status()
             payload = response.json()
         except (httpx.HTTPError, ValueError) as exc:
-            _logger.warning("Wikipedia request failed: %s", exc)
-            raise ProviderError(f"Wikipedia request failed: {exc}") from exc
+            _logger.warning("Wikipedia request failed: %s", type(exc).__name__)
+            raise ProviderError(f"Wikipedia request failed: {type(exc).__name__}") from exc
 
         results: list[SearchResult] = []
         try:

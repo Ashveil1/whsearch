@@ -14,36 +14,34 @@ class HtmlExtractor:
 
     _remove = ("script", "style", "noscript", "template", "svg", "nav", "footer", "form")
 
-    def extract(
-        self, url: str, html: str, *, published_at: datetime | None = None
-    ) -> Document:
+    def extract(self, url: str, html: str, *, published_at: datetime | None = None) -> Document:
         soup = BeautifulSoup(html, "html.parser")
         for tag in soup(self._remove):
             tag.decompose()
         title = _text(soup.title) or url
         root = soup.find("main") or soup.find("article") or soup.body or soup
-        headings: list[str] = []
-        blocks: list[str] = []
+        section: str | None = None
+        blocks: list[tuple[str, str | None]] = []
         for node in root.find_all(["h1", "h2", "h3", "h4", "p", "li", "pre", "blockquote"]):
             text = _clean(node.get_text(" ", strip=True))
             if not text:
                 continue
             if node.name and node.name.startswith("h"):
-                headings.append(text)
+                section = text
                 continue
-            blocks.append(text)
+            blocks.append((text, section))
         if not blocks:
             fallback = _clean(root.get_text(" ", strip=True))
-            blocks = [fallback] if fallback else []
-        if sum(len(b) for b in blocks) < 200:
+            blocks = [(fallback, section)] if fallback else []
+        if sum(len(text) for text, _ in blocks) < 200:
             # Degraded/JS-heavy pages: meta descriptions often survive when the
             # body is just a mount point. Keyless and dependency-free.
             meta = _meta_description(soup)
-            if meta and all(meta not in b for b in blocks):
-                blocks.append(meta)
+            if meta and all(meta not in text for text, _ in blocks):
+                blocks.append((meta, None))
         passages = tuple(
-            Passage(text=text, index=index, section=headings[-1] if headings else None)
-            for index, text in enumerate(blocks)
+            Passage(text=text, index=index, section=block_section)
+            for index, (text, block_section) in enumerate(blocks)
         )
         content = "\n\n".join(p.text for p in passages)
         canonical = _canonical_url(soup, url)

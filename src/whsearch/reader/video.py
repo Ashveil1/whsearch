@@ -34,7 +34,7 @@ def extract_video_id(url: str) -> str | None:
         return parsed.path.strip("/").split("/")[0] or None
     for prefix in ("/shorts/", "/live/", "/embed/"):
         if parsed.path.startswith(prefix):
-            return parsed.path[len(prefix):].split("/")[0] or None
+            return parsed.path[len(prefix) :].split("/")[0] or None
     return parse_qs(parsed.query).get("v", [None])[0]
 
 
@@ -54,9 +54,9 @@ def parse_watch_page(html: str) -> dict[str, str]:
     if not isinstance(details, dict):
         return {}
     microformat = payload.get("microformat", {})
-    renderer = microformat.get("playerMicroformatRenderer", {}) if isinstance(
-        microformat, dict
-    ) else {}
+    renderer = (
+        microformat.get("playerMicroformatRenderer", {}) if isinstance(microformat, dict) else {}
+    )
     return {
         "video_id": str(details.get("videoId", "")),
         "title": str(details.get("title", "")),
@@ -79,23 +79,34 @@ def description_passages(description: str) -> list[tuple[str | None, str]]:
     lines = [line for line in lines if line]
     sections: list[tuple[str | None, str]] = []
     current_section: str | None = None
+    section_emitted = False
     buffer: list[str] = []
 
     def _flush() -> None:
+        nonlocal section_emitted
         if buffer:
             sections.append((current_section, " ".join(buffer)))
+            section_emitted = True
             buffer.clear()
+
+    def _finish_section() -> None:
+        _flush()
+        # Timestamp-only chapters are useful location markers even when no
+        # descriptive paragraph follows them. Do not pretend they are captions.
+        if current_section and not section_emitted:
+            sections.append((current_section, current_section))
 
     for line in lines:
         chapter = _CHAPTER.match(line)
         if chapter and len(chapter.group(2).strip()) >= 2:
-            _flush()
+            _finish_section()
             current_section = f"{chapter.group(1)} {chapter.group(2).strip()}"
+            section_emitted = False
             continue
         buffer.append(line)
         if sum(len(part) for part in buffer) >= 800:
             _flush()
-    _flush()
+    _finish_section()
     return sections
 
 

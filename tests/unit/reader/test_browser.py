@@ -81,7 +81,8 @@ class FakeCM:
         class Chromium:
             async def launch(self, **kwargs: object) -> FakeBrowser:
                 assert kwargs.get("headless") is True
-                assert "--no-sandbox" in str(kwargs.get("args", []))
+                assert "--no-sandbox" not in str(kwargs.get("args", []))
+                assert kwargs.get("chromium_sandbox") is True
                 return outer._browser
 
         pw.chromium = Chromium()  # type: ignore[attr-defined]

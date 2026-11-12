@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from datetime import datetime
 from email.utils import parsedate_to_datetime
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import httpx
 
@@ -56,41 +57,77 @@ class ReaderService:
         robots: RobotsPolicy,
         *,
         max_bytes: int = 2_000_000,
+        timeout_seconds: float = 60.0,
         user_agent: str = DEFAULT_USER_AGENT,
         browser: BrowserRenderer | None = None,
     ) -> None:
         if max_bytes < 1024:
             raise ValueError("max_bytes must be at least 1024")
+        if timeout_seconds <= 0:
+            raise ValueError("timeout_seconds must be positive")
         if not user_agent.strip():
             raise ValueError("user_agent must not be empty")
         self._client = client
         self._robots = robots
         self._max_bytes = max_bytes
+        self._timeout_seconds = timeout_seconds
         self._user_agent = user_agent
         self._browser = browser
         self._fallback = HtmlExtractor()
 
     async def read(self, url: str) -> Document:
-        _validate_url(url)
-        if not await self._robots.allowed(url):
-            raise ReaderError("robots.txt disallows this URL or robots policy is unavailable")
         try:
-            async with self._client.stream(
-                "GET", url, headers={"User-Agent": self._user_agent}
-            ) as response:
-                response.raise_for_status()
-                content_type = response.headers.get("content-type", "").lower()
-                if "text/html" not in content_type and "application/xhtml+xml" not in content_type:
-                    raise ReaderError(f"unsupported content type: {content_type or 'unknown'}")
-                data = bytearray()
-                async for chunk in response.aiter_bytes():
-                    data.extend(chunk)
-                    if len(data) > self._max_bytes:
-                        raise ReaderError("document exceeds configured size limit")
-        except ReaderError:
-            raise
-        except httpx.HTTPError as exc:
-            raise ReaderError(f"HTTP fetch failed: {exc}") from exc
+            async with asyncio.timeout(self._timeout_seconds):
+                return await self._read(url)
+        except TimeoutError as exc:
+            raise ReaderError("page read deadline exceeded") from exc
+
+    async def _read(self, url: str) -> Document:
+        current_url = url
+        for _ in range(6):
+            _validate_url(current_url)
+            if not await self._robots.allowed(current_url):
+                raise ReaderError("robots.txt disallows this URL or robots policy is unavailable")
+            await self._robots.wait(current_url)
+            try:
+                async with self._client.stream(
+                    "GET",
+                    current_url,
+                    headers={"User-Agent": self._user_agent, "Accept-Encoding": "identity"},
+                    follow_redirects=False,
+                ) as response:
+                    if response.status_code in {301, 302, 303, 307, 308}:
+                        location = response.headers.get("location")
+                        if not location:
+                            raise ReaderError("redirect has no location")
+                        current_url = urljoin(current_url, location)
+                        continue
+                    response.raise_for_status()
+                    # A custom injected client may not use our bounded decoder.
+                    if response.headers.get("content-encoding", "identity").lower() not in {
+                        "",
+                        "identity",
+                    }:
+                        raise ReaderError("encoded response requires a bounded HTTP transport")
+                    content_type = response.headers.get("content-type", "").lower()
+                    if (
+                        "text/html" not in content_type
+                        and "application/xhtml+xml" not in content_type
+                    ):
+                        raise ReaderError(f"unsupported content type: {content_type or 'unknown'}")
+                    data = bytearray()
+                    async for chunk in response.aiter_bytes():
+                        data.extend(chunk)
+                        if len(data) > self._max_bytes:
+                            raise ReaderError("document exceeds configured size limit")
+                    break
+            except ReaderError:
+                raise
+            except httpx.HTTPError as exc:
+                raise ReaderError(f"HTTP fetch failed: {exc}") from exc
+        else:
+            raise ReaderError("too many redirects")
+        url = current_url
 
         html = bytes(data).decode(response.encoding or "utf-8", errors="replace")
         try:
@@ -101,9 +138,7 @@ class ReaderService:
             # Watch pages are JS shells: video metadata + description with
             # chapters beats nav garbage, and costs no extra request.
             video_doc = _from_watch_page(url, html, document)
-            if video_doc is not None and (
-                document is None or len(video_doc.content) > len(document.content)
-            ):
+            if video_doc is not None:
                 document = video_doc
         if document is not None and not _needs_browser(document.content):
             pass
@@ -183,6 +218,7 @@ def _from_rendered(
             language=document.language,
             published_at=document.published_at,
             canonical_url=document.canonical_url,
+            metadata=document.metadata,
         )
     return Document(
         url=url,
@@ -387,6 +423,27 @@ def _parse_date(value: object) -> datetime | None:
 
 
 def _validate_url(url: str) -> None:
-    parsed = urlparse(url)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+    if len(url) > 8192:
+        raise ReaderError("URL is too long")
+    try:
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+        _ = parsed.port
+    except ValueError as exc:
+        raise ReaderError("invalid URL") from exc
+    if parsed.scheme not in {"http", "https"} or not hostname:
         raise ReaderError("URL must be an absolute HTTP(S) URL")
+    if parsed.username is not None or parsed.password is not None:
+        raise ReaderError("URL credentials are not permitted")
+    import ipaddress
+
+    from whsearch.infrastructure.http.safe_network import is_public_address
+
+    try:
+        ipaddress.ip_address(hostname)
+    except ValueError:
+        if hostname.lower().rstrip(".") == "localhost":
+            raise ReaderError("local URLs are not permitted") from None
+    else:
+        if not is_public_address(hostname):
+            raise ReaderError("non-public IP addresses are not permitted")

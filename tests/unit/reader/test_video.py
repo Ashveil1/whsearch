@@ -55,11 +55,11 @@ def test_parse_watch_page_missing() -> None:
 
 def test_description_passages_use_chapters_as_sections() -> None:
     sections = description_passages("Cats playing.\n00:00 Intro\nPlay time here.\n10:24 Outro")
-    # Trailing chapter without following text carries no claim and is dropped.
     assert sections[0] == (None, "Cats playing.")
     assert sections[1][0] == "00:00 Intro"
     assert "Play time here." in sections[1][1]
-    assert len(sections) == 2
+    assert sections[2] == ("10:24 Outro", "10:24 Outro")
+    assert len(sections) == 3
 
 
 def _client(handler: Callable[[httpx.Request], httpx.Response]) -> httpx.AsyncClient:
@@ -82,3 +82,9 @@ def test_reader_builds_video_document_from_watch_page() -> None:
     assert document.author == "Cat TV"
     assert document.metadata["video_id"] == "abc123"
     assert any(p.section == "00:00 Intro" for p in document.passages)
+
+
+def test_chapter_only_description_keeps_timestamp_markers() -> None:
+    sections = description_passages("00:00 Intro\n01:20 Setup\n10:00 Wrap up")
+    assert [section for section, _ in sections] == ["00:00 Intro", "01:20 Setup", "10:00 Wrap up"]
+    assert all(text == section for section, text in sections)

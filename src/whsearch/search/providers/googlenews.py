@@ -5,6 +5,8 @@ import xml.etree.ElementTree as ET
 from email.utils import parsedate_to_datetime
 
 import httpx
+from defusedxml import ElementTree as SafeET
+from defusedxml.common import DefusedXmlException
 
 from whsearch.domain import SearchQuery, SearchResult, SourceType
 from whsearch.exceptions import ProviderError
@@ -44,9 +46,9 @@ class GoogleNewsProvider:
             )
             response.raise_for_status()
             items = _parse_rss(response.text)
-        except (httpx.HTTPError, ET.ParseError, ValueError) as exc:
-            _logger.warning("Google News request failed: %s", exc)
-            raise ProviderError(f"Google News request failed: {exc}") from exc
+        except (httpx.HTTPError, ET.ParseError, DefusedXmlException, ValueError) as exc:
+            _logger.warning("Google News request failed: %s", type(exc).__name__)
+            raise ProviderError(f"Google News request failed: {type(exc).__name__}") from exc
 
         results: list[SearchResult] = []
         for title, link, pub_date, source in items:
@@ -74,7 +76,7 @@ class GoogleNewsProvider:
 
 
 def _parse_rss(xml_text: str) -> list[tuple[str, str, str, str]]:
-    root = ET.fromstring(xml_text)
+    root = SafeET.fromstring(xml_text, forbid_dtd=True)
     items: list[tuple[str, str, str, str]] = []
     for item in root.iter("item"):
         title = (item.findtext("title") or "").strip()

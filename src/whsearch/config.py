@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import os
 from dataclasses import dataclass
 
@@ -12,6 +13,9 @@ class Settings:
 
     user_agent: str = "WHSearch/0.1"
     request_timeout_seconds: float = 15.0
+    read_timeout_seconds: float = 60.0
+    provider_timeout_seconds: float = 30.0
+    task_timeout_seconds: float = 120.0
     max_response_bytes: int = 5_000_000
     max_search_results: int = 30
     max_pages_per_task: int = 20
@@ -19,17 +23,29 @@ class Settings:
     cache_max_bytes: int = 500_000_000
     index_path: str | None = None
     index_max_entries: int = 5000
-    browser_enabled: bool = True
+    index_ttl_seconds: float = 86400.0
+    browser_enabled: bool = False
     browser_timeout_seconds: float = 15.0
     chromium_path: str | None = None
+    ca_file: str | None = None
 
     @classmethod
     def from_environment(cls) -> Settings:
         defaults = cls()
         return cls(
             user_agent=os.getenv("WHSEARCH_USER_AGENT", defaults.user_agent),
+            ca_file=os.getenv("WHSEARCH_CA_FILE") or None,
             request_timeout_seconds=_float_env(
                 "WHSEARCH_REQUEST_TIMEOUT", defaults.request_timeout_seconds, minimum=1.0
+            ),
+            read_timeout_seconds=_float_env(
+                "WHSEARCH_READ_TIMEOUT", defaults.read_timeout_seconds, minimum=1.0
+            ),
+            provider_timeout_seconds=_float_env(
+                "WHSEARCH_PROVIDER_TIMEOUT", defaults.provider_timeout_seconds, minimum=1.0
+            ),
+            task_timeout_seconds=_float_env(
+                "WHSEARCH_TASK_TIMEOUT", defaults.task_timeout_seconds, minimum=1.0
             ),
             max_response_bytes=_int_env(
                 "WHSEARCH_MAX_RESPONSE_BYTES", defaults.max_response_bytes, minimum=1_024
@@ -52,6 +68,9 @@ class Settings:
                 defaults.index_max_entries,
                 minimum=1,
                 maximum=1_000_000,
+            ),
+            index_ttl_seconds=_float_env(
+                "WHSEARCH_INDEX_TTL_SECONDS", defaults.index_ttl_seconds, minimum=0
             ),
             browser_enabled=_bool_env("WHSEARCH_BROWSER", defaults.browser_enabled),
             browser_timeout_seconds=_float_env(
@@ -90,7 +109,7 @@ def _float_env(name: str, default: float, *, minimum: float, maximum: float | No
         value = float(raw)
     except ValueError as exc:
         raise ConfigurationError(f"{name} must be a number") from exc
-    if value < minimum or (maximum is not None and value > maximum):
+    if not math.isfinite(value) or value < minimum or (maximum is not None and value > maximum):
         upper = f" and <= {maximum}" if maximum is not None else ""
         raise ConfigurationError(f"{name} must be >= {minimum}{upper}")
     return value

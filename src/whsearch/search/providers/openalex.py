@@ -33,8 +33,8 @@ class OpenAlexProvider:
             response.raise_for_status()
             payload = response.json()
         except (httpx.HTTPError, ValueError) as exc:
-            _logger.warning("OpenAlex request failed: %s", exc)
-            raise ProviderError(f"OpenAlex request failed: {exc}") from exc
+            _logger.warning("OpenAlex request failed: %s", type(exc).__name__)
+            raise ProviderError(f"OpenAlex request failed: {type(exc).__name__}") from exc
 
         items = payload.get("results", []) if isinstance(payload, dict) else []
         results: list[SearchResult] = []
@@ -50,9 +50,11 @@ class OpenAlexProvider:
             if not url.startswith(("http://", "https://")):
                 continue
             location = entry.get("primary_location") or {}
-            source = (location.get("source") or {}).get("display_name", "") if isinstance(
-                location, dict
-            ) else ""
+            source = (
+                (location.get("source") or {}).get("display_name", "")
+                if isinstance(location, dict)
+                else ""
+            )
             date = str(entry.get("publication_date", ""))
             cited = entry.get("cited_by_count", 0)
             abstract = _reconstruct_abstract(entry.get("abstract_inverted_index"))
