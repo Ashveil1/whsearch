@@ -24,3 +24,13 @@ def test_scores_bounded() -> None:
     scores = relevance_scores("Python", claims)
     assert all(0.0 <= value <= 1.0 for value in scores.values())
     assert scores["a"] > scores["b"]
+
+
+def test_question_stopwords_do_not_make_unrelated_text_relevant() -> None:
+    claims = [
+        _claim("unrelated", "The weather is sunny and the sky is blue."),
+        _claim("related", "Quantum computing uses quantum states to process information."),
+    ]
+    scores = relevance_scores("What is quantum computing?", claims)
+    assert scores["related"] > 0
+    assert scores["unrelated"] == 0

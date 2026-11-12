@@ -27,6 +27,24 @@ def extract_site_domains(text: str) -> tuple[list[str], str]:
     return domains, normalize_text(remaining)
 
 
+def provider_query(text: str, domains: tuple[str, ...]) -> str:
+    """Push down a single safe domain; multiple domains are filtered locally."""
+    if len(domains) != 1 or _SITE.search(text):
+        return text
+    try:
+        domain = domains[0].strip().rstrip(".").encode("idna").decode("ascii").lower()
+    except UnicodeError:
+        return text
+    labels = domain.split(".")
+    if (
+        len(labels) < 2
+        or len(domain) > 253
+        or any(not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", label) for label in labels)
+    ):
+        return text
+    return f"{text} site:{domain}"
+
+
 def extract_excluded_terms(text: str) -> list[str]:
     return [m.group(1).lower() for m in _EXCLUDE.finditer(text)]
 
@@ -67,24 +85,57 @@ def df_for_recency(recency_days: int | None) -> str | None:
 
 _NEWS_HINTS = frozenset(
     {
-        "news", "latest", "breaking", "today", "headline", "headlines",
-        "ข่าว", "ล่าสุด", "ด่วน", "วันนี้",
+        "news",
+        "latest",
+        "breaking",
+        "today",
+        "headline",
+        "headlines",
+        "ข่าว",
+        "ล่าสุด",
+        "ด่วน",
+        "วันนี้",
     }
 )
 
 _ACADEMIC_HINTS = frozenset(
     {
-        "paper", "papers", "arxiv", "doi", "journal", "study", "studies",
-        "research", "dataset", "preprint", "peer-reviewed",
-        "งานวิจัย", "เปเปอร์", "วารสาร",
+        "paper",
+        "papers",
+        "arxiv",
+        "doi",
+        "journal",
+        "study",
+        "studies",
+        "research",
+        "dataset",
+        "preprint",
+        "peer-reviewed",
+        "งานวิจัย",
+        "เปเปอร์",
+        "วารสาร",
     }
 )
 
 _VIDEO_HINTS = frozenset(
     {
-        "youtube", "youtu.be", "video", "videos", "clip", "clips",
-        "vlog", "livestream", "trailer", "mv", "ep.",
-        "วิดีโอ", "วีดีโอ", "คลิป", "ยูทูบ", "ยูทูป", "ดูย้อนหลัง",
+        "youtube",
+        "youtu.be",
+        "video",
+        "videos",
+        "clip",
+        "clips",
+        "vlog",
+        "livestream",
+        "trailer",
+        "mv",
+        "ep.",
+        "วิดีโอ",
+        "วีดีโอ",
+        "คลิป",
+        "ยูทูบ",
+        "ยูทูป",
+        "ดูย้อนหลัง",
     }
 )
 

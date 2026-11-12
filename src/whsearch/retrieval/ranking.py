@@ -30,6 +30,15 @@ def _tokens(text: str) -> list[str]:
             out.extend(_TOKEN.findall(chunk.lower()))
     return out
 
+
+def _expand_thai(tokens: list[str]) -> list[str]:
+    expanded = list(tokens)
+    for token in tokens:
+        if _THAI.search(token) and len(token) > 3:
+            expanded.extend(token[i : i + 3] for i in range(len(token) - 2))
+    return expanded
+
+
 _K1 = 1.2
 _B = 0.75
 
@@ -47,10 +56,16 @@ def rank_passages(query: str, passages: Iterable[Passage], *, limit: int = 20) -
     if not items:
         return []
     terms = _tokens(query)
+    # For Thai-only queries use character n-grams for unspaced phrases.
+    # Queries containing Latin entities retain exact tokens to avoid generic Thai
+    # fragments overwhelming the named entity; digits do not disable Thai n-grams.
+    thai_ngrams = bool(_THAI.search(query)) and not re.search(r"[a-zA-Z]", query)
+    if thai_ngrams:
+        terms = _expand_thai(terms)
     if not terms:
         return list(items)[:limit]
 
-    docs = [_tokens(p.text) for p in items]
+    docs = [(_expand_thai(_tokens(p.text)) if thai_ngrams else _tokens(p.text)) for p in items]
     lengths = [len(d) or 1 for d in docs]
     avgdl = sum(lengths) / len(lengths)
     doc_freq: dict[str, int] = {}
@@ -61,8 +76,7 @@ def rank_passages(query: str, passages: Iterable[Passage], *, limit: int = 20) -
     query_lower = query.lower().strip()
 
     raw: list[float] = []
-    for item in items:
-        tokens = _tokens(item.text)
+    for item, tokens in zip(items, docs, strict=True):
         freq: dict[str, int] = {}
         for token in tokens:
             freq[token] = freq.get(token, 0) + 1

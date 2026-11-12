@@ -38,8 +38,8 @@ class YouTubeProvider:
             response.raise_for_status()
             items = parse_search_results(response.text)
         except (httpx.HTTPError, ValueError) as exc:
-            _logger.warning("YouTube request failed: %s", exc)
-            raise ProviderError(f"YouTube request failed: {exc}") from exc
+            _logger.warning("YouTube request failed: %s", type(exc).__name__)
+            raise ProviderError(f"YouTube request failed: {type(exc).__name__}") from exc
 
         results: list[SearchResult] = []
         for entry in items:
@@ -91,9 +91,7 @@ def parse_search_results(html: str) -> list[dict[str, str]]:
             if not video_id:
                 continue
             title = _runs_text(video.get("title", {}))
-            channel = _runs_text(
-                video.get("ownerText", {}) or video.get("longBylineText", {})
-            )
+            channel = _runs_text(video.get("ownerText", {}) or video.get("longBylineText", {}))
             description = _description_snippet(video)
             snippet = description or (f"{title} — {channel}" if channel else title)
             entries.append(

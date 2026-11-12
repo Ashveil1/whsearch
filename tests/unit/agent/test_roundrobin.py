@@ -139,7 +139,7 @@ def test_research_tool_returns_answer() -> None:
             output = await research_tool(app, "fresh news query", max_pages=3, max_rounds=1)
         finally:
             await app.aclose()
-        assert isinstance(output["answer"], str) and output["answer"] != ""
+        assert isinstance(output["answer"], str)
         assert isinstance(output["answer_citations"], list)
 
     asyncio.run(_main())

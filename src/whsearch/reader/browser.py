@@ -32,7 +32,7 @@ class BrowserRenderer:
     to None — callers must always have a non-browser fallback.
     """
 
-    _LAUNCH_ARGS = ("--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu")
+    _LAUNCH_ARGS = ("--disable-dev-shm-usage", "--disable-gpu")
 
     def __init__(
         self,
@@ -70,8 +70,8 @@ class BrowserRenderer:
             except Exception as exc:
                 _logger.debug("browser render failed for %r: %s", url, exc)
                 return None
-        cleaned = " ".join((text or "").split())
-        return cleaned or None
+        cleaned = "\n".join(" ".join(line.split()) for line in (text or "").splitlines())
+        return cleaned[:200_000].strip() or None
 
     async def _ensure_browser(self, factory: Any) -> Any:
         if self._browser is not None:
@@ -83,11 +83,17 @@ class BrowserRenderer:
             self._playwright = playwright
             launch_kwargs: dict[str, Any] = {
                 "headless": True,
+                "chromium_sandbox": True,
                 "args": list(self._LAUNCH_ARGS),
             }
             if self._executable_path:
                 launch_kwargs["executable_path"] = self._executable_path
-            self._browser = await playwright.chromium.launch(**launch_kwargs)
+            try:
+                self._browser = await playwright.chromium.launch(**launch_kwargs)
+            except Exception:
+                await playwright.__aexit__(None, None, None)
+                self._playwright = None
+                raise
             return self._browser
 
     async def aclose(self) -> None:

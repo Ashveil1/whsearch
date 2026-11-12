@@ -61,3 +61,11 @@ def test_bm25_thai_entity_beats_spam() -> None:
     ]
     ranked = rank_passages("Zhypix คืออะไร มีความสามารถอะไรบ้าง?", passages)
     assert ranked[0].index == 1
+
+
+def test_thai_query_with_year_still_matches_thai_content() -> None:
+    passages = [
+        Passage("รถโดยสารในปี 2567 มีผู้เดินทางจำนวนมาก", 0),
+        Passage("รถไฟฟ้าสายใหม่เปิดให้บริการในปี 2567", 1),
+    ]
+    assert rank_passages("รถไฟฟ้าเปิดให้บริการ 2567", passages)[0].index == 1

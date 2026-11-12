@@ -107,3 +107,14 @@ def test_reconstruct_abstract_orders_positions() -> None:
     assert _reconstruct_abstract({"world": [1], "hello": [0]}) == "hello world"
     assert _reconstruct_abstract({}) == ""
     assert _reconstruct_abstract(None) == ""
+
+
+def test_news_provider_rejects_dtd_and_entities() -> None:
+    payload = '<!DOCTYPE rss [<!ENTITY x "expanded">]><rss><item><title>&x;</title></item></rss>'
+
+    async def run() -> None:
+        async with _client(lambda request: httpx.Response(200, text=payload)) as client:
+            with pytest.raises(ProviderError):
+                await GoogleNewsProvider(client).search(SearchQuery("news"))
+
+    asyncio.run(run())

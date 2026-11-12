@@ -31,10 +31,10 @@ async def search(
         {
             "title": result.title,
             "url": result.url,
-            "snippet": result.snippet
-            or f"{result.title} — result for '{query.strip()}'",
+            "snippet": result.snippet,
             "source_type": result.source_type.value,
             "score": result.score,
+            "metadata": result.metadata,
         }
         for result in results
     ]

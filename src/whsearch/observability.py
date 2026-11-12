@@ -10,7 +10,11 @@ def configure_logging(level: str | None = None) -> None:
     """Configure one predictable stderr handler for CLI/MCP hosts."""
     root = logging.getLogger(LOGGER_NAME)
     configured_level = level if level is not None else os.getenv("WHSEARCH_LOG_LEVEL")
-    root.setLevel(_parse_level(configured_level or "INFO"))
+    log_level = _parse_level(configured_level or "INFO")
+    root.setLevel(log_level)
+    # httpx INFO messages contain full URLs and search query strings.
+    if log_level > logging.DEBUG:
+        logging.getLogger("httpx").setLevel(logging.WARNING)
     if root.handlers:
         return
 

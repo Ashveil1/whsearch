@@ -21,8 +21,12 @@ jobs:
       - name: Tests
         run: python -m pytest
       - name: Lint
-        run: ruff check src tests
+        run: ruff check src tests benchmarks
       - name: Typecheck
-        run: python -m mypy src tests
+        run: python -m mypy src tests benchmarks
       - name: Compile check
-        run: python -m compileall -q src tests
+        run: python -m compileall -q src tests benchmarks
+      - name: Offline benchmark (diagnostic, no quality threshold)
+        run: |
+          python -m benchmarks.evaluate --summary-only
+          python -m benchmarks.evaluate --dataset benchmarks/data/quality_holdout.json --summary-only

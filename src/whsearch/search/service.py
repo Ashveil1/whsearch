@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+import time
 from collections import OrderedDict
 from collections.abc import Sequence
 
@@ -23,16 +24,23 @@ from whsearch.search.query import (
 _RRF_K = 60
 
 
+def _normalize_hostname(value: str) -> str:
+    try:
+        return value.strip().rstrip(".").encode("idna").decode("ascii").lower().removeprefix("www.")
+    except UnicodeError:
+        return ""
+
+
 def _result_allowed(url: str, domains: tuple[str, ...]) -> bool:
     if not domains:
         return True
     from urllib.parse import urlparse
 
-    netloc = urlparse(url).netloc.lower().split("@")[-1].split(":")[0]
-    if netloc.startswith("www."):
-        netloc = netloc[4:]
-    wanted = {d.lower().removeprefix("www.").strip() for d in domains if d and d.strip()}
-    return any(netloc == domain or netloc.endswith(f".{domain}") for domain in wanted)
+    host = _normalize_hostname(urlparse(url).hostname or "")
+    wanted = {_normalize_hostname(domain) for domain in domains if domain and domain.strip()}
+    return bool(host) and any(
+        domain and (host == domain or host.endswith(f".{domain}")) for domain in wanted
+    )
 
 
 def _passes_exclusions(result: SearchResult, excluded: list[str]) -> bool:
@@ -90,8 +98,12 @@ def _fuse_rrf(lists: list[list[SearchResult]]) -> list[SearchResult]:
     best: dict[str, SearchResult] = {}
     order = 0
     for results in lists:
+        seen_in_provider: set[str] = set()
         for rank, result in enumerate(results):
             key = normalize_url(result.url)
+            if key in seen_in_provider:
+                continue
+            seen_in_provider.add(key)
             scores[key] = scores.get(key, 0.0) + 1.0 / (_RRF_K + rank + 1)
             if key not in first_seen:
                 first_seen[key] = order
@@ -134,6 +146,25 @@ def _snippet_quality(title: str, snippet: str) -> int:
     return len(cleaned)
 
 
+def _with_provenance(
+    result: SearchResult, providers: list[str], failed: list[str], *, cached: bool = False
+) -> SearchResult:
+    metadata = dict(result.metadata)
+    metadata["whsearch"] = {
+        "providers": providers,
+        "failed_providers": failed,
+        "stale_cache": cached,
+    }
+    return SearchResult(
+        title=result.title,
+        url=result.url,
+        snippet=result.snippet,
+        source_type=result.source_type,
+        score=result.score,
+        metadata=metadata,
+    )
+
+
 def _provider_vertical(provider: SearchProvider) -> str:
     return str(getattr(provider, "vertical", "web") or "web").lower()
 
@@ -151,14 +182,20 @@ class SearchService:
         extra_providers: Sequence[SearchProvider] = (),
         max_results: int = 30,
         cache_size: int = 128,
+        provider_timeout_seconds: float = 30.0,
     ) -> None:
         if max_results < 1:
             raise ValueError("max_results must be positive")
         if cache_size < 0:
             raise ValueError("cache_size must be non-negative")
+        if provider_timeout_seconds <= 0:
+            raise ValueError("provider_timeout_seconds must be positive")
+        self._provider_timeout_seconds = provider_timeout_seconds
         self._providers = [provider, *extra_providers]
         self._max_results = max_results
-        self._cache: OrderedDict[tuple[object, ...], list[SearchResult]] = OrderedDict()
+        self._cache: OrderedDict[tuple[object, ...], tuple[float, list[SearchResult]]] = (
+            OrderedDict()
+        )
         self._cache_size = cache_size
 
     async def search(self, query: SearchQuery) -> Sequence[SearchResult]:
@@ -178,7 +215,15 @@ class SearchService:
             cached = self._cached(effective)
             if cached is not None:
                 _logger.debug("search served from cache after failure: query=%r", query.text)
-                return cached
+                return [
+                    _with_provenance(
+                        r,
+                        list(r.metadata.get("whsearch", {}).get("providers", [])),
+                        list(r.metadata.get("whsearch", {}).get("failed_providers", [])),
+                        cached=True,
+                    )
+                    for r in cached
+                ]
             raise
         if not results:
             simplified = simplify_query(cleaned)
@@ -210,13 +255,20 @@ class SearchService:
             selected.append(provider)
         return selected or list(self._providers)
 
-    async def _execute(
-        self, query: SearchQuery, excluded: list[str]
-    ) -> list[SearchResult]:
+    async def _search_provider(
+        self, provider: SearchProvider, query: SearchQuery
+    ) -> Sequence[SearchResult]:
+        try:
+            async with asyncio.timeout(self._provider_timeout_seconds):
+                return await provider.search(query)
+        except TimeoutError as exc:
+            raise ProviderError(f"{type(provider).__name__} timed out") from exc
+
+    async def _execute(self, query: SearchQuery, excluded: list[str]) -> list[SearchResult]:
         providers = self._select_providers(query)
         if len(providers) == 1:
             # Preserve single-provider error contract (original error propagates).
-            results = list(await providers[0].search(query))
+            results = list(await self._search_provider(providers[0], query))
             unique = deduplicate_results(results)
             filtered = [
                 r
@@ -224,7 +276,10 @@ class SearchService:
                 if _result_allowed(r.url, query.domains) and _passes_exclusions(r, excluded)
             ]
             ranked = _with_rank_scores(filtered)
-            capped = list(ranked)[: min(query.limit, self._max_results)]
+            capped = [
+                _with_provenance(r, [type(providers[0]).__name__], [])
+                for r in ranked[: min(query.limit, self._max_results)]
+            ]
             _logger.debug(
                 "search completed: query=%r unique=%d returned=%d",
                 query.text,
@@ -238,32 +293,47 @@ class SearchService:
         self, providers: list[SearchProvider], query: SearchQuery, excluded: list[str]
     ) -> list[SearchResult]:
         settled = await asyncio.gather(
-            *(provider.search(query) for provider in providers),
+            *(self._search_provider(provider, query) for provider in providers),
             return_exceptions=True,
         )
         lists: list[list[SearchResult]] = []
-        failures = 0
+        failures: list[str] = []
+        source_providers: dict[str, list[str]] = {}
         merged_count = 0
         for provider, outcome in zip(providers, settled, strict=True):
             if isinstance(outcome, Exception):
-                failures += 1
-                _logger.warning("search provider %s failed: %s", type(provider).__name__, outcome)
+                failures.append(type(provider).__name__)
+                _logger.warning(
+                    "search provider %s failed: %s", type(provider).__name__, type(outcome).__name__
+                )
                 continue
             if isinstance(outcome, BaseException):  # pragma: no cover - cancellations propagate
                 raise outcome
             items = list(outcome)
             merged_count += len(items)
             lists.append(items)
+            for item in items:
+                names = source_providers.setdefault(normalize_url(item.url), [])
+                name = type(provider).__name__
+                if name not in names:
+                    names.append(name)
         if not lists and failures:
-            raise ProviderError(f"all {failures} search providers failed")
+            raise ProviderError(f"all {len(failures)} search providers failed")
+        if failures and not any(lists):
+            raise ProviderError("some providers failed and no results were available")
         fused = _fuse_rrf(lists)
         filtered = [
             r
             for r in fused
             if _result_allowed(r.url, query.domains) and _passes_exclusions(r, excluded)
         ]
+        if failures and not filtered:
+            raise ProviderError("some providers failed and no matching results were available")
         ranked = _with_rank_scores(filtered)
-        capped = list(ranked)[: min(query.limit, self._max_results)]
+        capped = [
+            _with_provenance(r, source_providers.get(normalize_url(r.url), []), failures)
+            for r in ranked[: min(query.limit, self._max_results)]
+        ]
         _logger.debug(
             "search fan-out completed: query=%r providers=%d merged=%d returned=%d",
             query.text,
@@ -281,14 +351,18 @@ class SearchService:
         cached = self._cache.get(key)
         if cached is None:
             return None
+        timestamp, results = cached
+        if time.monotonic() - timestamp > 300:
+            del self._cache[key]
+            return None
         self._cache.move_to_end(key)
-        return list(cached)
+        return list(results)
 
     def _remember(self, query: SearchQuery, results: list[SearchResult]) -> None:
         if self._cache_size == 0 or not results:
             return
         key = self._cache_key(query)
-        self._cache[key] = list(results)
+        self._cache[key] = (time.monotonic(), list(results))
         self._cache.move_to_end(key)
         while len(self._cache) > self._cache_size:
             self._cache.popitem(last=False)
